@@ -1,0 +1,1411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AEROWATCH // GLOBAL FLIGHT TRACKER</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+
+  :root {
+    --cyan: #00f5ff;
+    --cyan-dim: #00a8b5;
+    --green: #39ff14;
+    --orange: #ff6b00;
+    --red: #ff2244;
+    --bg: #020810;
+    --panel: rgba(0, 20, 35, 0.85);
+    --border: rgba(0, 245, 255, 0.25);
+    --glow: 0 0 10px rgba(0,245,255,0.4), 0 0 30px rgba(0,245,255,0.15);
+    --glow-green: 0 0 8px rgba(57,255,20,0.5);
+    --glow-orange: 0 0 8px rgba(255,107,0,0.5);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--cyan);
+    font-family: 'Share Tech Mono', monospace;
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+    user-select: none;
+  }
+
+  canvas {
+    display: block;
+    cursor: grab;
+  }
+  canvas:active { cursor: grabbing; }
+
+  /* HUD OVERLAY */
+  #hud {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* Corner brackets */
+  .corner {
+    position: absolute;
+    width: 40px; height: 40px;
+    border-color: var(--cyan);
+    border-style: solid;
+    opacity: 0.6;
+  }
+  .corner-tl { top: 12px; left: 12px; border-width: 2px 0 0 2px; }
+  .corner-tr { top: 12px; right: 12px; border-width: 2px 2px 0 0; }
+  .corner-bl { bottom: 12px; left: 12px; border-width: 0 0 2px 2px; }
+  .corner-br { bottom: 12px; right: 12px; border-width: 0 2px 2px 0; }
+
+  /* HEADER BAR */
+  #header {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 50px;
+    background: linear-gradient(180deg, rgba(0,245,255,0.08) 0%, transparent 100%);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    pointer-events: none;
+    z-index: 20;
+  }
+
+  .title-block {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .title-main {
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 900;
+    font-size: 18px;
+    color: var(--cyan);
+    text-shadow: var(--glow);
+    letter-spacing: 4px;
+  }
+
+  .title-sub {
+    font-size: 10px;
+    color: var(--cyan-dim);
+    letter-spacing: 3px;
+    opacity: 0.7;
+  }
+
+  .header-right {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    font-size: 11px;
+    color: var(--cyan-dim);
+    letter-spacing: 1px;
+  }
+
+  .live-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--green);
+    font-size: 11px;
+    text-shadow: var(--glow-green);
+  }
+
+  .live-dot {
+    width: 7px; height: 7px;
+    background: var(--green);
+    border-radius: 50%;
+    box-shadow: var(--glow-green);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.7); }
+  }
+
+  /* LEFT PANEL */
+  #panel-left {
+    position: fixed;
+    top: 60px;
+    left: 14px;
+    width: 240px;
+    pointer-events: all;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .panel-block {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 12px 14px;
+    backdrop-filter: blur(8px);
+    position: relative;
+  }
+
+  .panel-block::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, var(--cyan) 0%, transparent 100%);
+    opacity: 0.5;
+  }
+
+  .panel-label {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: var(--cyan-dim);
+    margin-bottom: 10px;
+    opacity: 0.8;
+  }
+
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+    font-size: 11px;
+  }
+
+  .stat-label { color: rgba(0,245,255,0.5); font-size: 10px; }
+  .stat-val {
+    color: var(--cyan);
+    font-size: 16px;
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 700;
+    text-shadow: var(--glow);
+  }
+  .stat-val.green { color: var(--green); text-shadow: var(--glow-green); }
+  .stat-val.orange { color: var(--orange); text-shadow: var(--glow-orange); }
+
+  /* Slider */
+  .ctrl-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 11px;
+    color: rgba(0,245,255,0.6);
+  }
+
+  .ctrl-val {
+    color: var(--cyan);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 12px;
+    min-width: 40px;
+    text-align: right;
+  }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 3px;
+    background: rgba(0,245,255,0.15);
+    outline: none;
+    border-radius: 0;
+    margin: 4px 0 10px;
+    cursor: pointer;
+  }
+
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    background: var(--cyan);
+    box-shadow: var(--glow);
+    cursor: pointer;
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+  }
+
+  input[type=range]::-webkit-slider-runnable-track {
+    background: linear-gradient(90deg, var(--cyan) var(--val, 50%), rgba(0,245,255,0.15) var(--val, 50%));
+    height: 3px;
+  }
+
+  /* Select / checkboxes */
+  select {
+    background: rgba(0,20,35,0.9);
+    border: 1px solid var(--border);
+    color: var(--cyan);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    padding: 5px 8px;
+    width: 100%;
+    outline: none;
+    cursor: pointer;
+    margin-bottom: 6px;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+
+  select:focus { border-color: var(--cyan); box-shadow: var(--glow); }
+
+  .check-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+  }
+
+  .check-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: rgba(0,245,255,0.6);
+    cursor: pointer;
+  }
+
+  .check-item input[type=checkbox] {
+    appearance: none;
+    width: 12px; height: 12px;
+    border: 1px solid var(--border);
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .check-item input[type=checkbox]:checked {
+    background: var(--cyan);
+    border-color: var(--cyan);
+    box-shadow: var(--glow);
+  }
+
+  .check-item input[type=checkbox]:checked::after {
+    content: '✓';
+    position: absolute;
+    top: -2px; left: 1px;
+    font-size: 10px;
+    color: var(--bg);
+    font-weight: bold;
+  }
+
+  /* Buttons */
+  .btn-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+  }
+
+  .btn {
+    flex: 1;
+    background: rgba(0,245,255,0.05);
+    border: 1px solid var(--border);
+    color: var(--cyan);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    padding: 6px 4px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.15s;
+    pointer-events: all;
+  }
+
+  .btn:hover {
+    background: rgba(0,245,255,0.15);
+    border-color: var(--cyan);
+    box-shadow: var(--glow);
+  }
+
+  .btn.active {
+    background: rgba(0,245,255,0.2);
+    border-color: var(--cyan);
+    color: #fff;
+    box-shadow: var(--glow);
+  }
+
+  /* RIGHT PANEL - Flight list */
+  #panel-right {
+    position: fixed;
+    top: 60px;
+    right: 14px;
+    width: 230px;
+    pointer-events: all;
+    z-index: 20;
+  }
+
+  .flight-list {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(8px);
+    max-height: calc(100vh - 140px);
+    overflow-y: auto;
+  }
+
+  .flight-list::-webkit-scrollbar { width: 3px; }
+  .flight-list::-webkit-scrollbar-track { background: transparent; }
+  .flight-list::-webkit-scrollbar-thumb { background: var(--cyan-dim); }
+
+  .flight-list-header {
+    padding: 10px 14px 8px;
+    border-bottom: 1px solid var(--border);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: var(--cyan-dim);
+    position: relative;
+  }
+
+  .flight-list-header::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+    opacity: 0.5;
+  }
+
+  .flight-item {
+    padding: 8px 14px;
+    border-bottom: 1px solid rgba(0,245,255,0.06);
+    cursor: pointer;
+    transition: background 0.1s;
+    position: relative;
+  }
+
+  .flight-item:hover {
+    background: rgba(0,245,255,0.07);
+  }
+
+  .flight-item.selected {
+    background: rgba(0,245,255,0.12);
+    border-left: 2px solid var(--cyan);
+  }
+
+  .fi-callsign {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--cyan);
+    text-shadow: var(--glow);
+  }
+
+  .fi-route {
+    font-size: 10px;
+    color: rgba(0,245,255,0.5);
+    margin-top: 2px;
+  }
+
+  .fi-data {
+    display: flex;
+    gap: 10px;
+    margin-top: 3px;
+    font-size: 9px;
+    color: rgba(0,245,255,0.4);
+  }
+
+  .fi-alt { color: var(--green); font-size: 9px; }
+  .fi-spd { color: var(--orange); font-size: 9px; }
+
+  /* BOTTOM BAR */
+  #bottom-bar {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 34px;
+    background: linear-gradient(0deg, rgba(0,245,255,0.06) 0%, transparent 100%);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 30px;
+    font-size: 10px;
+    color: rgba(0,245,255,0.4);
+    letter-spacing: 1px;
+    pointer-events: none;
+    z-index: 20;
+  }
+
+  .bottom-item { display: flex; gap: 8px; }
+  .bottom-key { color: var(--cyan-dim); }
+
+  /* Tooltip */
+  #tooltip {
+    position: fixed;
+    background: rgba(0,10,20,0.95);
+    border: 1px solid var(--cyan);
+    padding: 10px 14px;
+    font-size: 11px;
+    pointer-events: none;
+    z-index: 30;
+    display: none;
+    min-width: 180px;
+    box-shadow: var(--glow);
+  }
+
+  .tt-call {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--cyan);
+    text-shadow: var(--glow);
+    margin-bottom: 6px;
+  }
+
+  .tt-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 3px;
+    color: rgba(0,245,255,0.6);
+  }
+
+  .tt-val { color: var(--cyan); }
+
+  /* Loading overlay */
+  #loading {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    gap: 20px;
+  }
+
+  .load-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 28px;
+    font-weight: 900;
+    color: var(--cyan);
+    text-shadow: var(--glow);
+    letter-spacing: 8px;
+  }
+
+  .load-bar-wrap {
+    width: 300px;
+    height: 3px;
+    background: rgba(0,245,255,0.1);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .load-bar {
+    height: 100%;
+    background: var(--cyan);
+    box-shadow: var(--glow);
+    animation: loadBar 1.8s ease-in-out forwards;
+    width: 0;
+  }
+
+  @keyframes loadBar {
+    0% { width: 0; }
+    60% { width: 75%; }
+    100% { width: 100%; }
+  }
+
+  .load-status {
+    font-size: 11px;
+    color: var(--cyan-dim);
+    letter-spacing: 3px;
+    animation: blink 1s step-end infinite;
+  }
+
+  @keyframes blink { 50% { opacity: 0; } }
+
+  #scan-line {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+    opacity: 0.4;
+    animation: scanDown 6s linear infinite;
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  @keyframes scanDown {
+    0% { top: 50px; opacity: 0; }
+    5% { opacity: 0.4; }
+    95% { opacity: 0.4; }
+    100% { top: calc(100vh - 34px); opacity: 0; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="globe"></canvas>
+<div id="scan-line"></div>
+
+<!-- LOADING -->
+<div id="loading">
+  <div class="load-title">AEROWATCH</div>
+  <div style="font-size:10px;color:var(--cyan-dim);letter-spacing:4px;margin-top:-10px">GLOBAL FLIGHT TRACKER // PROTOTYPE</div>
+  <div class="load-bar-wrap"><div class="load-bar"></div></div>
+  <div class="load-status">INITIALIZING SATELLITE UPLINK...</div>
+</div>
+
+<!-- HUD CORNERS -->
+<div id="hud">
+  <div class="corner corner-tl"></div>
+  <div class="corner corner-tr"></div>
+  <div class="corner corner-bl"></div>
+  <div class="corner corner-br"></div>
+</div>
+
+<!-- HEADER -->
+<div id="header">
+  <div class="title-block">
+    <span class="title-main">AEROWATCH</span>
+    <span class="title-sub">GLOBAL AIR TRAFFIC MONITOR // PROTOTYPE</span>
+  </div>
+  <div class="header-right">
+    <div class="live-indicator"><div class="live-dot"></div><span id="live-label">CONNECTING</span></div>
+    <span id="clock">--:--:-- UTC</span>
+    <span id="update-timer">UPDT: --s</span>
+  </div>
+</div>
+
+<!-- LEFT PANEL -->
+<div id="panel-left">
+  <div class="panel-block">
+    <div class="panel-label">// TRAFFIC OVERVIEW</div>
+    <div class="stat-row">
+      <span class="stat-label">ACTIVE FLIGHTS</span>
+      <span class="stat-val" id="stat-total">0</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">DISPLAYED</span>
+      <span class="stat-val green" id="stat-shown">0</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">FILTERED OUT</span>
+      <span class="stat-val orange" id="stat-filtered">0</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">LAST UPDATE</span>
+      <span class="stat-val" id="stat-time" style="font-size:11px">--:--</span>
+    </div>
+  </div>
+
+  <div class="panel-block">
+    <div class="panel-label">// DISPLAY LIMIT</div>
+    <div class="ctrl-row">
+      <span>MAX FLIGHTS</span>
+      <span class="ctrl-val" id="limit-val">200</span>
+    </div>
+    <input type="range" id="limit-slider" min="10" max="2000" value="200" step="10">
+
+    <div class="ctrl-row">
+      <span>ARC OPACITY</span>
+      <span class="ctrl-val" id="opacity-val">70%</span>
+    </div>
+    <input type="range" id="opacity-slider" min="10" max="100" value="70" step="5">
+
+    <div class="ctrl-row">
+      <span>ARC HEIGHT</span>
+      <span class="ctrl-val" id="arc-val">1.0×</span>
+    </div>
+    <input type="range" id="arc-slider" min="3" max="20" value="10" step="1">
+  </div>
+
+  <div class="panel-block">
+    <div class="panel-label">// FILTER BY REGION</div>
+    <select id="region-select">
+      <option value="all">ALL REGIONS</option>
+      <option value="NA">NORTH AMERICA</option>
+      <option value="EU">EUROPE</option>
+      <option value="AS">ASIA</option>
+      <option value="SA">SOUTH AMERICA</option>
+      <option value="AF">AFRICA</option>
+      <option value="OC">OCEANIA</option>
+      <option value="ME">MIDDLE EAST</option>
+    </select>
+
+    <div class="panel-label" style="margin-top:8px">// FLIGHT CATEGORY</div>
+    <div class="check-grid">
+      <label class="check-item"><input type="checkbox" class="cat-check" value="commercial" checked> COMMERCIAL</label>
+      <label class="check-item"><input type="checkbox" class="cat-check" value="cargo" checked> CARGO</label>
+      <label class="check-item"><input type="checkbox" class="cat-check" value="private" checked> PRIVATE</label>
+      <label class="check-item"><input type="checkbox" class="cat-check" value="military"> MILITARY</label>
+    </div>
+  </div>
+
+  <div class="panel-block">
+    <div class="panel-label">// ALTITUDE FILTER (ft)</div>
+    <div class="ctrl-row">
+      <span>MIN ALT</span>
+      <span class="ctrl-val" id="alt-min-val">0k</span>
+    </div>
+    <input type="range" id="alt-min" min="0" max="45" value="0" step="1">
+    <div class="ctrl-row">
+      <span>MAX ALT</span>
+      <span class="ctrl-val" id="alt-max-val">45k</span>
+    </div>
+    <input type="range" id="alt-max" min="0" max="45" value="45" step="1">
+  </div>
+
+  <div class="panel-block">
+    <div class="panel-label">// VIEW CONTROLS</div>
+    <div class="btn-row">
+      <button class="btn active" id="btn-arcs" onclick="toggleLayer('arcs',this)">ARCS</button>
+      <button class="btn active" id="btn-dots" onclick="toggleLayer('dots',this)">DOTS</button>
+      <button class="btn active" id="btn-grid" onclick="toggleLayer('grid',this)">GRID</button>
+    </div>
+    <div class="btn-row" style="margin-top:6px">
+      <button class="btn" onclick="resetView()">RESET VIEW</button>
+      <button class="btn" onclick="fetchFlights()">REFRESH</button>
+    </div>
+  </div>
+</div>
+
+<!-- RIGHT PANEL -->
+<div id="panel-right">
+  <div class="flight-list">
+    <div class="flight-list-header">// ACTIVE FLIGHTS <span id="list-count" style="float:right;color:var(--cyan)">[0]</span></div>
+    <div id="flight-list-body"></div>
+  </div>
+</div>
+
+<!-- BOTTOM BAR -->
+<div id="bottom-bar">
+  <div class="bottom-item"><span class="bottom-key">DRAG</span><span>ROTATE GLOBE</span></div>
+  <div class="bottom-item"><span class="bottom-key">SCROLL</span><span>ZOOM</span></div>
+  <div class="bottom-item"><span class="bottom-key">HOVER</span><span>FLIGHT INFO</span></div>
+  <div class="bottom-item"><span class="bottom-key">CLICK</span><span>SELECT FLIGHT</span></div>
+  <div class="bottom-item" style="margin-left:auto;color:rgba(0,245,255,0.25)">DATA: OPENSKY NETWORK // ADS-B LIVE</div>
+</div>
+
+<!-- TOOLTIP -->
+<div id="tooltip">
+  <div class="tt-call" id="tt-call">---</div>
+  <div class="tt-row"><span>ORIGIN</span><span class="tt-val" id="tt-orig">---</span></div>
+  <div class="tt-row"><span>DEST</span><span class="tt-val" id="tt-dest">---</span></div>
+  <div class="tt-row"><span>ALTITUDE</span><span class="tt-val" id="tt-alt">---</span></div>
+  <div class="tt-row"><span>SPEED</span><span class="tt-val" id="tt-spd">---</span></div>
+  <div class="tt-row"><span>HEADING</span><span class="tt-val" id="tt-hdg">---</span></div>
+  <div class="tt-row"><span>COUNTRY</span><span class="tt-val" id="tt-country">---</span></div>
+</div>
+
+<script>
+// ── CONSTANTS ──────────────────────────────────────────────────────────────
+const C = {
+  CYAN:        '#00f5ff',
+  CYAN_DIM:    '#00a8b5',
+  GREEN:       '#39ff14',
+  ORANGE:      '#ff6b00',
+  RED:         '#ff2244',
+  BG:          '#020810',
+  GLOBE_COLOR: '#041525',
+};
+
+const REGION_BOUNDS = {
+  NA: { latMin:15,  latMax:72,  lonMin:-168, lonMax:-52  },
+  EU: { latMin:35,  latMax:72,  lonMin:-12,  lonMax:45   },
+  AS: { latMin:-10, latMax:77,  lonMin:45,   lonMax:180  },
+  SA: { latMin:-56, latMax:15,  lonMin:-82,  lonMax:-34  },
+  AF: { latMin:-35, latMax:37,  lonMin:-18,  lonMax:52   },
+  OC: { latMin:-47, latMax:-10, lonMin:110,  lonMax:180  },
+  ME: { latMin:12,  latMax:42,  lonMin:35,   lonMax:75   },
+};
+
+// ── STATE ──────────────────────────────────────────────────────────────────
+let flights   = [];
+let displayed = [];
+let selected  = null;
+let lastUpdate = null;
+let updateTimer = 0;
+
+let layers = { arcs: true, dots: true, grid: true };
+
+let settings = {
+  limit:      200,
+  arcOpacity: 0.7,
+  arcHeight:  1.0,
+  altMin:     0,
+  altMax:     45000,
+  region:     'all',
+};
+
+// Globe rotation / zoom state
+let globe = {
+  rotX: 0.35,
+  rotY: 0,
+  zoom: 1.0,
+  dragging: false,
+  lastX: 0,
+  lastY: 0,
+  autoRotate: true,
+};
+
+// ── CANVAS SETUP ───────────────────────────────────────────────────────────
+const canvas = document.getElementById('globe');
+const ctx    = canvas.getContext('2d');
+
+function resize() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ── GLOBE MATH ─────────────────────────────────────────────────────────────
+function getRadius() {
+  return Math.min(canvas.width, canvas.height) * 0.36 * globe.zoom;
+}
+
+function latLonTo3D(lat, lon) {
+  const phi   = (90 - lat) * Math.PI / 180;
+  const theta = (lon + 180) * Math.PI / 180;
+  return {
+    x:  Math.sin(phi) * Math.cos(theta),
+    y:  Math.cos(phi),
+    z: -Math.sin(phi) * Math.sin(theta),
+  };
+}
+
+function rotatePoint(p) {
+  // Rotate around Y then X
+  const cy = Math.cos(globe.rotY), sy = Math.sin(globe.rotY);
+  const cx = Math.cos(globe.rotX), sx = Math.sin(globe.rotX);
+  // Y rotation
+  const x1 =  p.x * cy + p.z * sy;
+  const z1 = -p.x * sy + p.z * cy;
+  // X rotation
+  const y2 =  p.y * cx - z1 * sx;
+  const z2 =  p.y * sx + z1 * cx;
+  return { x: x1, y: y2, z: z2 };
+}
+
+function project(p3d) {
+  const R  = getRadius();
+  const cx = canvas.width  / 2;
+  const cy = canvas.height / 2;
+  return {
+    x:   cx + p3d.x * R,
+    y:   cy - p3d.y * R,
+    vis: p3d.z < 0,
+  };
+}
+
+function latLonToScreen(lat, lon) {
+  const p3 = latLonTo3D(lat, lon);
+  const r  = rotatePoint(p3);
+  return project(r);
+}
+
+// Great circle interpolation
+function slerp(p1, p2, t) {
+  const dot = p1.x*p2.x + p1.y*p2.y + p1.z*p2.z;
+  const clamped = Math.max(-1, Math.min(1, dot));
+  const omega = Math.acos(clamped);
+  if (Math.abs(omega) < 0.0001) {
+    return { x: p1.x*(1-t)+p2.x*t, y: p1.y*(1-t)+p2.y*t, z: p1.z*(1-t)+p2.z*t };
+  }
+  const s = Math.sin(omega);
+  const a = Math.sin((1-t)*omega)/s;
+  const b = Math.sin(t*omega)/s;
+  return { x: a*p1.x+b*p2.x, y: a*p1.y+b*p2.y, z: a*p1.z+b*p2.z };
+}
+
+// ── DRAW GLOBE ─────────────────────────────────────────────────────────────
+function drawGlobe() {
+  const R  = getRadius();
+  const cx = canvas.width  / 2;
+  const cy = canvas.height / 2;
+
+  // Outer atmosphere glow
+  const atm = ctx.createRadialGradient(cx, cy, R * 0.95, cx, cy, R * 1.15);
+  atm.addColorStop(0,   'rgba(0,245,255,0.08)');
+  atm.addColorStop(0.5, 'rgba(0,100,180,0.04)');
+  atm.addColorStop(1,   'transparent');
+  ctx.fillStyle = atm;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R * 1.15, 0, Math.PI*2);
+  ctx.fill();
+
+  // Globe base
+  const grad = ctx.createRadialGradient(cx - R*0.3, cy - R*0.3, R*0.05, cx, cy, R);
+  grad.addColorStop(0,   '#061e35');
+  grad.addColorStop(0.6, '#031120');
+  grad.addColorStop(1,   '#020810');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI*2);
+  ctx.fill();
+
+  // Specular highlight
+  const spec = ctx.createRadialGradient(cx - R*0.35, cy - R*0.35, 0, cx - R*0.2, cy - R*0.2, R*0.6);
+  spec.addColorStop(0,   'rgba(0,245,255,0.06)');
+  spec.addColorStop(0.4, 'rgba(0,245,255,0.02)');
+  spec.addColorStop(1,   'transparent');
+  ctx.fillStyle = spec;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI*2);
+  ctx.fill();
+
+  // Night-side shadow
+  const shadow = ctx.createRadialGradient(cx + R*0.4, cy + R*0.2, R*0.2, cx + R*0.5, cy + R*0.3, R*1.1);
+  shadow.addColorStop(0,   'rgba(0,0,0,0.55)');
+  shadow.addColorStop(1,   'transparent');
+  ctx.fillStyle = shadow;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI*2);
+  ctx.fill();
+}
+
+function drawGrid() {
+  if (!layers.grid) return;
+  const R = getRadius();
+
+  // Latitude lines
+  for (let lat = -80; lat <= 80; lat += 20) {
+    ctx.beginPath();
+    let first = true;
+    for (let lon = -180; lon <= 180; lon += 3) {
+      const s = latLonToScreen(lat, lon);
+      if (!s.vis) { first = true; continue; }
+      if (first) { ctx.moveTo(s.x, s.y); first = false; }
+      else ctx.lineTo(s.x, s.y);
+    }
+    const isMajor = lat === 0 || lat === 30 || lat === -30 || lat === 60 || lat === -60;
+    ctx.strokeStyle = isMajor ? 'rgba(0,245,255,0.18)' : 'rgba(0,245,255,0.06)';
+    ctx.lineWidth = isMajor ? 0.8 : 0.4;
+    ctx.stroke();
+  }
+
+  // Longitude lines
+  for (let lon = -180; lon < 180; lon += 20) {
+    ctx.beginPath();
+    let first = true;
+    for (let lat = -90; lat <= 90; lat += 3) {
+      const s = latLonToScreen(lat, lon);
+      if (!s.vis) { first = true; continue; }
+      if (first) { ctx.moveTo(s.x, s.y); first = false; }
+      else ctx.lineTo(s.x, s.y);
+    }
+    const isMajor = lon === 0 || lon === 90 || lon === -90 || lon === 180 || lon === -180;
+    ctx.strokeStyle = isMajor ? 'rgba(0,245,255,0.18)' : 'rgba(0,245,255,0.06)';
+    ctx.lineWidth = isMajor ? 0.8 : 0.4;
+    ctx.stroke();
+  }
+}
+
+function drawArc(f) {
+  if (!f.lat || !f.lon) return;
+
+  // Simulate departure/arrival from heading + position
+  const R  = getRadius();
+  const a0 = latLonTo3D(f.lat, f.lon);
+  const r0 = rotatePoint(a0);
+  if (r0.z > 0.15) return; // behind globe
+
+  const p0 = project(r0);
+  if (!p0) return;
+
+  // Draw arc if we have origin / destination estimates
+  if (f.origLat !== undefined && f.destLat !== undefined) {
+    const a1 = latLonTo3D(f.origLat, f.origLon);
+    const a2 = latLonTo3D(f.destLat, f.destLon);
+
+    // Lift arc points off globe surface
+    const lift = 0.12 * settings.arcHeight;
+
+    ctx.beginPath();
+    let first = true;
+    const steps = 40;
+    for (let i = 0; i <= steps; i++) {
+      const t   = i / steps;
+      let  pt  = slerp(a1, a2, t);
+      const len = Math.sqrt(pt.x*pt.x+pt.y*pt.y+pt.z*pt.z);
+      const arcLift = lift * Math.sin(Math.PI * t); // parabolic
+      pt = { x: pt.x/len * (1+arcLift), y: pt.y/len * (1+arcLift), z: pt.z/len * (1+arcLift) };
+
+      const r = rotatePoint(pt);
+      if (r.z > 0.2) { first = true; continue; }
+      const s = project(r);
+      if (first) { ctx.moveTo(s.x, s.y); first = false; }
+      else ctx.lineTo(s.x, s.y);
+    }
+
+    const progress  = f.progress || 0.5;
+    const isSelected = selected && selected.callsign === f.callsign;
+
+    // Color by altitude
+    let arcColor = C.CYAN;
+    if (f.alt > 35000) arcColor = '#00f5ff';
+    else if (f.alt > 20000) arcColor = '#00d4e8';
+    else arcColor = '#0090aa';
+
+    const alpha = settings.arcOpacity * (isSelected ? 1.4 : 0.85);
+    ctx.strokeStyle = isSelected
+      ? `rgba(255,255,100,${Math.min(1, alpha)})`
+      : `rgba(0,245,255,${Math.min(1, alpha * 0.55)})`;
+    ctx.lineWidth = isSelected ? 2.2 : 1.0;
+    if (isSelected) {
+      ctx.shadowColor = '#ffff64';
+      ctx.shadowBlur  = 8;
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  // Dot for current position
+  if (layers.dots) {
+    const isSelected = selected && selected.callsign === f.callsign;
+    const dotR = isSelected ? 5 : (R > 250 ? 3 : 2.5);
+
+    ctx.beginPath();
+    ctx.arc(p0.x, p0.y, dotR, 0, Math.PI*2);
+
+    if (isSelected) {
+      ctx.fillStyle = '#ffff64';
+      ctx.shadowColor = '#ffff64';
+      ctx.shadowBlur  = 14;
+    } else if (f.alt > 35000) {
+      ctx.fillStyle = '#00f5ff';
+      ctx.shadowColor = '#00f5ff';
+      ctx.shadowBlur  = 6;
+    } else {
+      ctx.fillStyle = '#00c8d4';
+      ctx.shadowColor = '#00c8d4';
+      ctx.shadowBlur  = 4;
+    }
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Heading tick
+    if (f.heading !== null && f.heading !== undefined) {
+      const headRad = (f.heading - 90) * Math.PI / 180;
+      const tickLen = dotR * 2.5;
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p0.x + Math.cos(headRad) * tickLen, p0.y + Math.sin(headRad) * tickLen);
+      ctx.strokeStyle = isSelected ? 'rgba(255,255,100,0.9)' : 'rgba(0,245,255,0.7)';
+      ctx.lineWidth = isSelected ? 2 : 1.2;
+      ctx.stroke();
+    }
+
+    // Callsign label for selected
+    if (isSelected) {
+      ctx.font = '11px "Share Tech Mono"';
+      ctx.fillStyle = '#ffff64';
+      ctx.shadowColor = '#ffff64';
+      ctx.shadowBlur  = 6;
+      ctx.fillText(f.callsign || '???', p0.x + 8, p0.y - 8);
+      ctx.shadowBlur = 0;
+    }
+  }
+}
+
+// ── APPLY FILTERS ──────────────────────────────────────────────────────────
+function applyFilters() {
+  const region = settings.region;
+  const bounds = REGION_BOUNDS[region];
+
+  displayed = flights.filter(f => {
+    if (!f.lat || !f.lon) return false;
+    if (f.alt < settings.altMin || f.alt > settings.altMax) return false;
+    if (bounds) {
+      if (f.lat < bounds.latMin || f.lat > bounds.latMax) return false;
+      if (f.lon < bounds.lonMin || f.lon > bounds.lonMax) return false;
+    }
+    return true;
+  }).slice(0, settings.limit);
+
+  updateStats();
+  updateFlightList();
+}
+
+function updateStats() {
+  document.getElementById('stat-total').textContent    = flights.length;
+  document.getElementById('stat-shown').textContent    = displayed.length;
+  document.getElementById('stat-filtered').textContent = flights.length - displayed.length;
+  document.getElementById('list-count').textContent    = `[${displayed.length}]`;
+}
+
+// ── FLIGHT LIST ────────────────────────────────────────────────────────────
+function updateFlightList() {
+  const body = document.getElementById('flight-list-body');
+  body.innerHTML = '';
+  const slice = displayed.slice(0, 80); // list only top 80
+  slice.forEach(f => {
+    const div = document.createElement('div');
+    div.className = 'flight-item' + (selected && selected.callsign === f.callsign ? ' selected' : '');
+    div.innerHTML = `
+      <div class="fi-callsign">${f.callsign || '??????'}</div>
+      <div class="fi-route">${f.originCountry || '???'}</div>
+      <div class="fi-data">
+        <span class="fi-alt">▲ ${f.alt ? Math.round(f.alt/100)*100+' ft' : '---'}</span>
+        <span class="fi-spd">► ${f.speed ? Math.round(f.speed)+' kts' : '---'}</span>
+      </div>`;
+    div.onclick = () => selectFlight(f);
+    body.appendChild(div);
+  });
+  if (displayed.length > 80) {
+    const more = document.createElement('div');
+    more.style.cssText = 'padding:8px 14px;font-size:10px;color:rgba(0,245,255,0.3);text-align:center';
+    more.textContent = `+ ${displayed.length - 80} MORE FLIGHTS`;
+    body.appendChild(more);
+  }
+}
+
+function selectFlight(f) {
+  selected = (selected && selected.callsign === f.callsign) ? null : f;
+  updateFlightList();
+}
+
+// ── TOOLTIP ────────────────────────────────────────────────────────────────
+function showTooltip(f, mx, my) {
+  const tt = document.getElementById('tooltip');
+  document.getElementById('tt-call').textContent    = f.callsign || '??????';
+  document.getElementById('tt-orig').textContent    = f.originCountry || '---';
+  document.getElementById('tt-dest').textContent    = '---';
+  document.getElementById('tt-alt').textContent     = f.alt ? `${Math.round(f.alt).toLocaleString()} ft` : '---';
+  document.getElementById('tt-spd').textContent     = f.speed ? `${Math.round(f.speed)} kts` : '---';
+  document.getElementById('tt-hdg').textContent     = f.heading !== null ? `${Math.round(f.heading)}°` : '---';
+  document.getElementById('tt-country').textContent = f.originCountry || '---';
+
+  tt.style.display = 'block';
+  tt.style.left    = (mx + 18) + 'px';
+  tt.style.top     = (my - 10) + 'px';
+}
+
+function hideTooltip() {
+  document.getElementById('tooltip').style.display = 'none';
+}
+
+// ── MOUSE INTERACTIONS ─────────────────────────────────────────────────────
+canvas.addEventListener('mousedown', e => {
+  globe.dragging   = true;
+  globe.autoRotate = false;
+  globe.lastX = e.clientX;
+  globe.lastY = e.clientY;
+});
+
+window.addEventListener('mouseup', () => { globe.dragging = false; });
+
+window.addEventListener('mousemove', e => {
+  if (globe.dragging) {
+    const dx = e.clientX - globe.lastX;
+    const dy = e.clientY - globe.lastY;
+    globe.rotY += dx * 0.006;
+    globe.rotX += dy * 0.006;
+    globe.rotX  = Math.max(-Math.PI/2 + 0.05, Math.min(Math.PI/2 - 0.05, globe.rotX));
+    globe.lastX = e.clientX;
+    globe.lastY = e.clientY;
+    return;
+  }
+
+  // Hit-test for tooltip
+  const R  = getRadius();
+  let   closest = null;
+  let   minDist = 20;
+
+  displayed.forEach(f => {
+    if (!f.lat || !f.lon) return;
+    const s = latLonToScreen(f.lat, f.lon);
+    if (s.vis) return;
+    const d = Math.hypot(e.clientX - s.x, e.clientY - s.y);
+    if (d < minDist) { minDist = d; closest = f; }
+  });
+
+  if (closest) showTooltip(closest, e.clientX, e.clientY);
+  else hideTooltip();
+});
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  globe.zoom *= e.deltaY > 0 ? 0.93 : 1.07;
+  globe.zoom  = Math.max(0.3, Math.min(8, globe.zoom));
+}, { passive: false });
+
+canvas.addEventListener('click', e => {
+  const R = getRadius();
+  let closest = null;
+  let minDist = 18;
+
+  displayed.forEach(f => {
+    if (!f.lat || !f.lon) return;
+    const s = latLonToScreen(f.lat, f.lon);
+    if (s.vis) return;
+    const d = Math.hypot(e.clientX - s.x, e.clientY - s.y);
+    if (d < minDist) { minDist = d; closest = f; }
+  });
+
+  if (closest) selectFlight(closest);
+});
+
+// ── CONTROLS ───────────────────────────────────────────────────────────────
+function sliderSetup(id, cb) {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => cb(el));
+  // init track fill
+  const pct = (el.value - el.min) / (el.max - el.min) * 100;
+  el.style.setProperty('--val', pct + '%');
+}
+
+sliderSetup('limit-slider', el => {
+  settings.limit = parseInt(el.value);
+  document.getElementById('limit-val').textContent = el.value;
+  const pct = (el.value - el.min) / (el.max - el.min) * 100;
+  el.style.setProperty('--val', pct + '%');
+  applyFilters();
+});
+
+sliderSetup('opacity-slider', el => {
+  settings.arcOpacity = parseInt(el.value) / 100;
+  document.getElementById('opacity-val').textContent = el.value + '%';
+  const pct = (el.value - el.min) / (el.max - el.min) * 100;
+  el.style.setProperty('--val', pct + '%');
+});
+
+sliderSetup('arc-slider', el => {
+  settings.arcHeight = parseInt(el.value) / 10;
+  document.getElementById('arc-val').textContent = settings.arcHeight.toFixed(1) + '×';
+  const pct = (el.value - el.min) / (el.max - el.min) * 100;
+  el.style.setProperty('--val', pct + '%');
+});
+
+sliderSetup('alt-min', el => {
+  settings.altMin = parseInt(el.value) * 1000;
+  document.getElementById('alt-min-val').textContent = el.value + 'k';
+  const pct = (el.value - el.min) / (el.max - el.min) * 100;
+  el.style.setProperty('--val', pct + '%');
+  applyFilters();
+});
+
+sliderSetup('alt-max', el => {
+  settings.altMax = parseInt(el.value) * 1000;
+  document.getElementById('alt-max-val').textContent = el.value + 'k';
+  const pct = (el.value - el.min) / (el.max - el.min) * 100;
+  el.style.setProperty('--val', pct + '%');
+  applyFilters();
+});
+
+document.getElementById('region-select').addEventListener('change', e => {
+  settings.region = e.target.value;
+  applyFilters();
+});
+
+function toggleLayer(name, btn) {
+  layers[name] = !layers[name];
+  btn.classList.toggle('active', layers[name]);
+}
+
+function resetView() {
+  globe.rotX = 0.35;
+  globe.rotY = 0;
+  globe.zoom = 1.0;
+  globe.autoRotate = true;
+}
+
+// ── FLIGHT DATA (OpenSky) ─────────────────────────────────────────────────
+async function fetchFlights() {
+  document.getElementById('live-label').textContent = 'FETCHING...';
+
+  try {
+    // OpenSky Network free REST API — no auth needed for basic states
+    // Returns: [icao24, callsign, origin_country, time_position, last_contact,
+    //           longitude, latitude, baro_altitude, on_ground, velocity,
+    //           true_track, vertical_rate, sensors, geo_altitude, squawk, spi, position_source]
+    const res = await fetch('https://opensky-network.org/api/states/all', {
+      headers: { 'Accept': 'application/json' }
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    flights = (data.states || [])
+      .filter(s => s[5] !== null && s[6] !== null) // must have position
+      .map(s => ({
+        icao24:        s[0],
+        callsign:      (s[1] || '').trim() || s[0].toUpperCase(),
+        originCountry: s[2],
+        lon:           s[5],
+        lat:           s[6],
+        alt:           s[7] ? s[7] * 3.28084 : (s[13] ? s[13] * 3.28084 : 0), // meters → feet
+        onGround:      s[8],
+        speed:         s[9] ? s[9] * 1.94384 : 0, // m/s → kts
+        heading:       s[10],
+        vertRate:      s[11],
+        // Estimate origin/dest by projecting backward/forward along heading
+        origLat:       s[6] && s[10] !== null ? s[6] - Math.cos((s[10]||0)*Math.PI/180)*12 : undefined,
+        origLon:       s[5] && s[10] !== null ? s[5] - Math.sin((s[10]||0)*Math.PI/180)*18 : undefined,
+        destLat:       s[6] && s[10] !== null ? s[6] + Math.cos((s[10]||0)*Math.PI/180)*12 : undefined,
+        destLon:       s[5] && s[10] !== null ? s[5] + Math.sin((s[10]||0)*Math.PI/180)*18 : undefined,
+        progress:      0.5,
+      }))
+      .filter(f => !f.onGround);
+
+    lastUpdate = new Date();
+    updateTimer = 0;
+    document.getElementById('stat-time').textContent =
+      lastUpdate.toISOString().substr(11,8);
+    document.getElementById('live-label').textContent = 'LIVE';
+    applyFilters();
+
+  } catch (err) {
+    console.warn('OpenSky fetch failed:', err.message);
+    document.getElementById('live-label').textContent = 'DEMO MODE';
+
+    // ── DEMO DATA ── generate plausible random flights
+    if (flights.length === 0) generateDemoFlights();
+  }
+}
+
+function generateDemoFlights() {
+  const routes = [
+    // Major global routes as [origLat,origLon,destLat,destLon,country]
+    [51.5,-0.1,40.7,-74.0,'United Kingdom'],
+    [40.7,-74.0,48.8,2.3,'United States'],
+    [35.7,139.7,34.0,118.2,'Japan'],
+    [22.3,114.2,1.3,103.8,'China'],
+    [-33.9,151.2,37.6,-122.4,'Australia'],
+    [55.8,37.6,51.5,-0.1,'Russia'],
+    [52.5,13.4,48.8,2.3,'Germany'],
+    [25.3,55.4,35.7,139.7,'UAE'],
+    [19.4,-99.1,40.7,-74.0,'Mexico'],
+    [-23.5,-46.6,48.8,2.3,'Brazil'],
+    [28.6,77.2,25.3,55.4,'India'],
+    [1.3,103.8,22.3,114.2,'Singapore'],
+    [6.5,3.4,52.5,13.4,'Nigeria'],
+    [30.1,31.4,48.8,2.3,'Egypt'],
+    [41.0,29.0,40.7,-74.0,'Turkey'],
+    [59.9,10.7,51.5,-0.1,'Norway'],
+    [37.6,-122.4,35.7,139.7,'United States'],
+    [48.1,16.6,52.5,13.4,'Austria'],
+    [-26.2,28.1,1.3,103.8,'South Africa'],
+    [45.5,-73.6,51.5,-0.1,'Canada'],
+  ];
+
+  const genFlights = [];
+  for (let i = 0; i < 600; i++) {
+    const route = routes[i % routes.length];
+    const t     = Math.random();
+    const lat   = route[0] + (route[2]-route[0])*t + (Math.random()-0.5)*3;
+    const lon   = route[1] + (route[3]-route[1])*t + (Math.random()-0.5)*3;
+    const hdg   = Math.atan2(route[3]-route[1], route[2]-route[0]) * 180/Math.PI + (Math.random()-0.5)*15;
+    genFlights.push({
+      icao24:        Math.random().toString(16).substr(2,6),
+      callsign:      route[4].substr(0,2).toUpperCase() + Math.floor(Math.random()*9000+1000),
+      originCountry: route[4],
+      lat, lon,
+      alt:           (25000 + Math.random()*18000),
+      onGround:      false,
+      speed:         420 + Math.random()*120,
+      heading:       (hdg + 360) % 360,
+      origLat:       route[0], origLon: route[1],
+      destLat:       route[2], destLon: route[3],
+      progress:      t,
+    });
+  }
+  flights = genFlights;
+  applyFilters();
+}
+
+// ── CLOCK ──────────────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  const h   = String(now.getUTCHours()).padStart(2,'0');
+  const m   = String(now.getUTCMinutes()).padStart(2,'0');
+  const s   = String(now.getUTCSeconds()).padStart(2,'0');
+  document.getElementById('clock').textContent = `${h}:${m}:${s} UTC`;
+
+  if (lastUpdate) {
+    const sec = Math.floor((now - lastUpdate) / 1000);
+    document.getElementById('update-timer').textContent = `UPDT: ${sec}s ago`;
+  }
+}
+
+// ── RENDER LOOP ────────────────────────────────────────────────────────────
+let frame = 0;
+function render() {
+  requestAnimationFrame(render);
+  frame++;
+
+  // Auto-rotate
+  if (globe.autoRotate) globe.rotY += 0.0008;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Background
+  ctx.fillStyle = C.BG;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Stars
+  if (frame % 300 === 0 || frame === 1) buildStars();
+  drawStars();
+
+  drawGlobe();
+  drawGrid();
+
+  // Arcs and dots
+  if (layers.arcs || layers.dots) {
+    displayed.forEach(f => drawArc(f));
+  }
+
+  // Globe rim
+  const R  = getRadius();
+  const cx = canvas.width  / 2;
+  const cy = canvas.height / 2;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI*2);
+  ctx.strokeStyle = 'rgba(0,245,255,0.35)';
+  ctx.lineWidth   = 1.2;
+  ctx.shadowColor = '#00f5ff';
+  ctx.shadowBlur  = 12;
+  ctx.stroke();
+  ctx.shadowBlur  = 0;
+
+  // Polar rings
+  for (const alpha of [0.15, 0.06]) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, R * 1.02, 0, Math.PI*2);
+    ctx.strokeStyle = `rgba(0,245,255,${alpha})`;
+    ctx.lineWidth   = alpha > 0.1 ? 0.8 : 0.4;
+    ctx.stroke();
+  }
+
+  updateClock();
+}
+
+// ── STARS ─────────────────────────────────────────────────────────────────
+let stars = [];
+function buildStars() {
+  stars = [];
+  for (let i = 0; i < 350; i++) {
+    stars.push({
+      x:    Math.random() * canvas.width,
+      y:    Math.random() * canvas.height,
+      r:    Math.random() * 1.2 + 0.2,
+      a:    Math.random() * 0.6 + 0.1,
+      twink: Math.random() * Math.PI * 2,
+    });
+  }
+}
+buildStars();
+
+function drawStars() {
+  stars.forEach(s => {
+    const alpha = s.a * (0.7 + 0.3 * Math.sin(s.twink + frame * 0.015));
+    ctx.fillStyle = `rgba(180,240,255,${alpha})`;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
+    ctx.fill();
+  });
+}
+
+// ── BOOT ───────────────────────────────────────────────────────────────────
+setTimeout(() => {
+  document.getElementById('loading').style.transition = 'opacity 0.6s';
+  document.getElementById('loading').style.opacity    = '0';
+  setTimeout(() => {
+    document.getElementById('loading').style.display = 'none';
+    fetchFlights();
+    // Refresh every 60s (OpenSky rate limit friendly)
+    setInterval(fetchFlights, 60000);
+  }, 600);
+}, 2200);
+
+render();
+</script>
+</body>
+</html>

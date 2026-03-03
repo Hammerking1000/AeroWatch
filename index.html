@@ -706,6 +706,37 @@ const REGION_BOUNDS = {
   ME: { latMin:12,  latMax:42,  lonMin:35,   lonMax:75   },
 };
 
+const AIRPORT_HUBS = [
+  { name:'New York', lat:40.64, lon:-73.78 },
+  { name:'Los Angeles', lat:33.94, lon:-118.41 },
+  { name:'Chicago', lat:41.98, lon:-87.90 },
+  { name:'Atlanta', lat:33.64, lon:-84.43 },
+  { name:'Dallas', lat:32.90, lon:-97.04 },
+  { name:'London', lat:51.47, lon:-0.45 },
+  { name:'Paris', lat:49.01, lon:2.55 },
+  { name:'Amsterdam', lat:52.31, lon:4.76 },
+  { name:'Frankfurt', lat:50.03, lon:8.57 },
+  { name:'Madrid', lat:40.47, lon:-3.56 },
+  { name:'Dubai', lat:25.25, lon:55.36 },
+  { name:'Istanbul', lat:41.28, lon:28.75 },
+  { name:'Doha', lat:25.27, lon:51.61 },
+  { name:'Delhi', lat:28.56, lon:77.10 },
+  { name:'Mumbai', lat:19.09, lon:72.87 },
+  { name:'Singapore', lat:1.36, lon:103.99 },
+  { name:'Hong Kong', lat:22.31, lon:113.92 },
+  { name:'Tokyo', lat:35.55, lon:139.78 },
+  { name:'Seoul', lat:37.46, lon:126.44 },
+  { name:'Sydney', lat:-33.94, lon:151.18 },
+  { name:'Melbourne', lat:-37.67, lon:144.84 },
+  { name:'Johannesburg', lat:-26.14, lon:28.24 },
+  { name:'Cairo', lat:30.12, lon:31.40 },
+  { name:'Nairobi', lat:-1.32, lon:36.93 },
+  { name:'Sao Paulo', lat:-23.43, lon:-46.47 },
+  { name:'Mexico City', lat:19.44, lon:-99.07 },
+  { name:'Toronto', lat:43.68, lon:-79.63 },
+  { name:'Vancouver', lat:49.19, lon:-123.18 },
+];
+
 // ── STATE ──────────────────────────────────────────────────────────────────
 let flights   = [];
 let displayed = [];
@@ -752,12 +783,12 @@ function getRadius() {
 }
 
 function latLonTo3D(lat, lon) {
-  const phi   = (90 - lat) * Math.PI / 180;
-  const theta = (lon + 180) * Math.PI / 180;
+  const phi   = lat * Math.PI / 180;
+  const theta = lon * Math.PI / 180;
   return {
-    x:  Math.sin(phi) * Math.cos(theta),
-    y:  Math.cos(phi),
-    z: -Math.sin(phi) * Math.sin(theta),
+    x: Math.cos(phi) * Math.sin(theta),
+    y: Math.sin(phi),
+    z: Math.cos(phi) * Math.cos(theta),
   };
 }
 
@@ -781,7 +812,7 @@ function project(p3d) {
   return {
     x:   cx + p3d.x * R,
     y:   cy - p3d.y * R,
-    vis: p3d.z < 0,
+    vis: p3d.z > 0,
   };
 }
 
@@ -789,6 +820,30 @@ function latLonToScreen(lat, lon) {
   const p3 = latLonTo3D(lat, lon);
   const r  = rotatePoint(p3);
   return project(r);
+}
+
+function hasCoords(lat, lon) {
+  return Number.isFinite(lat) && Number.isFinite(lon);
+}
+
+function wrapLon(lon) {
+  return ((lon + 540) % 360) - 180;
+}
+
+function nearestHub(lat, lon, excludeName = null) {
+  let best = null;
+  let bestScore = Infinity;
+  for (const hub of AIRPORT_HUBS) {
+    if (excludeName && hub.name === excludeName) continue;
+    const dLat = lat - hub.lat;
+    const dLon = ((lon - hub.lon + 540) % 360) - 180;
+    const score = dLat * dLat + dLon * dLon;
+    if (score < bestScore) {
+      best = hub;
+      bestScore = score;
+    }
+  }
+  return best;
 }
 
 // Great circle interpolation
@@ -889,27 +944,26 @@ function drawGrid() {
 }
 
 function drawArc(f) {
-  if (!f.lat || !f.lon) return;
+  if (!hasCoords(f.lat, f.lon)) return;
 
   // Simulate departure/arrival from heading + position
   const R  = getRadius();
   const a0 = latLonTo3D(f.lat, f.lon);
   const r0 = rotatePoint(a0);
-  if (r0.z > 0.15) return; // behind globe
+  if (r0.z < -0.15) return; // behind globe
 
   const p0 = project(r0);
   if (!p0) return;
 
   // Draw arc if we have origin / destination estimates
-  if (f.origLat !== undefined && f.destLat !== undefined) {
+  if (hasCoords(f.origLat, f.origLon) && hasCoords(f.destLat, f.destLon)) {
     const a1 = latLonTo3D(f.origLat, f.origLon);
     const a2 = latLonTo3D(f.destLat, f.destLon);
 
     // Lift arc points off globe surface
     const lift = 0.12 * settings.arcHeight;
 
-    ctx.beginPath();
-    let first = true;
+    const screenPts = [];
     const steps = 40;
     for (let i = 0; i <= steps; i++) {
       const t   = i / steps;
@@ -919,32 +973,71 @@ function drawArc(f) {
       pt = { x: pt.x/len * (1+arcLift), y: pt.y/len * (1+arcLift), z: pt.z/len * (1+arcLift) };
 
       const r = rotatePoint(pt);
-      if (r.z > 0.2) { first = true; continue; }
+      if (r.z < -0.2) { screenPts.push(null); continue; }
       const s = project(r);
-      if (first) { ctx.moveTo(s.x, s.y); first = false; }
-      else ctx.lineTo(s.x, s.y);
+      screenPts.push({ x: s.x, y: s.y, t });
     }
 
-    const progress  = f.progress || 0.5;
+    const progress  = Math.max(0, Math.min(1, f.progress ?? 0.5));
     const isSelected = selected && selected.callsign === f.callsign;
 
-    // Color by altitude
-    let arcColor = C.CYAN;
-    if (f.alt > 35000) arcColor = '#00f5ff';
-    else if (f.alt > 20000) arcColor = '#00d4e8';
-    else arcColor = '#0090aa';
+    const drawSegment = (predicate) => {
+      ctx.beginPath();
+      let first = true;
+      for (const p of screenPts) {
+        if (!p || !predicate(p.t)) { first = true; continue; }
+        if (first) { ctx.moveTo(p.x, p.y); first = false; }
+        else ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+    };
 
-    const alpha = settings.arcOpacity * (isSelected ? 1.4 : 0.85);
+    const alpha = settings.arcOpacity;
     ctx.strokeStyle = isSelected
-      ? `rgba(255,255,100,${Math.min(1, alpha)})`
-      : `rgba(0,245,255,${Math.min(1, alpha * 0.55)})`;
-    ctx.lineWidth = isSelected ? 2.2 : 1.0;
-    if (isSelected) {
-      ctx.shadowColor = '#ffff64';
-      ctx.shadowBlur  = 8;
+      ? `rgba(255,255,120,${Math.min(1, alpha * 1.1)})`
+      : `rgba(0,245,255,${Math.min(1, alpha * 0.65)})`;
+    ctx.lineWidth = isSelected ? 2.0 : 1.1;
+    drawSegment(t => t <= progress);
+
+    ctx.strokeStyle = `rgba(255,255,255,${isSelected ? 0.16 : 0.1})`;
+    ctx.lineWidth = isSelected ? 1.4 : 0.9;
+    drawSegment(t => t >= progress);
+
+    let before = null;
+    for (const p of screenPts) {
+      if (p && p.t <= progress) before = p;
     }
-    ctx.stroke();
-    ctx.shadowBlur = 0;
+    const after = screenPts.find(p => p && p.t >= progress + 0.03) || screenPts.find(p => p && p.t >= progress);
+    if (before && after) {
+      const ang = Math.atan2(after.y - before.y, after.x - before.x);
+      const arrowLen = isSelected ? 9 : 7;
+      const arrowSpread = 0.55;
+      ctx.beginPath();
+      ctx.moveTo(before.x, before.y);
+      ctx.lineTo(before.x - Math.cos(ang - arrowSpread) * arrowLen, before.y - Math.sin(ang - arrowSpread) * arrowLen);
+      ctx.moveTo(before.x, before.y);
+      ctx.lineTo(before.x - Math.cos(ang + arrowSpread) * arrowLen, before.y - Math.sin(ang + arrowSpread) * arrowLen);
+      ctx.strokeStyle = isSelected ? 'rgba(255,255,120,0.95)' : 'rgba(0,245,255,0.7)';
+      ctx.lineWidth = isSelected ? 1.8 : 1.2;
+      ctx.stroke();
+    }
+
+    if (isSelected) {
+      const origin = latLonToScreen(f.origLat, f.origLon);
+      const dest = latLonToScreen(f.destLat, f.destLon);
+      const drawEndpoint = (pt, color) => {
+        if (!pt.vis) return;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 8;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      };
+      drawEndpoint(origin, 'rgba(255,255,140,0.95)');
+      drawEndpoint(dest, 'rgba(255,255,255,0.95)');
+    }
   }
 
   // Dot for current position
@@ -973,7 +1066,7 @@ function drawArc(f) {
 
     // Heading tick
     if (f.heading !== null && f.heading !== undefined) {
-      const headRad = (f.heading - 90) * Math.PI / 180;
+      const headRad = (90 - f.heading) * Math.PI / 180;
       const tickLen = dotR * 2.5;
       ctx.beginPath();
       ctx.moveTo(p0.x, p0.y);
@@ -1001,7 +1094,7 @@ function applyFilters() {
   const bounds = REGION_BOUNDS[region];
 
   displayed = flights.filter(f => {
-    if (!f.lat || !f.lon) return false;
+    if (!hasCoords(f.lat, f.lon)) return false;
     if (f.alt < settings.altMin || f.alt > settings.altMax) return false;
     if (bounds) {
       if (f.lat < bounds.latMin || f.lat > bounds.latMax) return false;
@@ -1087,7 +1180,7 @@ window.addEventListener('mousemove', e => {
     const dx = e.clientX - globe.lastX;
     const dy = e.clientY - globe.lastY;
     globe.rotY += dx * 0.006;
-    globe.rotX += dy * 0.006;
+    globe.rotX -= dy * 0.006;
     globe.rotX  = Math.max(-Math.PI/2 + 0.05, Math.min(Math.PI/2 - 0.05, globe.rotX));
     globe.lastX = e.clientX;
     globe.lastY = e.clientY;
@@ -1100,7 +1193,7 @@ window.addEventListener('mousemove', e => {
   let   minDist = 20;
 
   displayed.forEach(f => {
-    if (!f.lat || !f.lon) return;
+    if (!hasCoords(f.lat, f.lon)) return;
     const s = latLonToScreen(f.lat, f.lon);
     if (s.vis) return;
     const d = Math.hypot(e.clientX - s.x, e.clientY - s.y);
@@ -1123,7 +1216,7 @@ canvas.addEventListener('click', e => {
   let minDist = 18;
 
   displayed.forEach(f => {
-    if (!f.lat || !f.lon) return;
+    if (!hasCoords(f.lat, f.lon)) return;
     const s = latLonToScreen(f.lat, f.lon);
     if (s.vis) return;
     const d = Math.hypot(e.clientX - s.x, e.clientY - s.y);
@@ -1226,11 +1319,23 @@ async function fetchFlights() {
         speed:         s[9] ? s[9] * 1.94384 : 0, // m/s → kts
         heading:       s[10],
         vertRate:      s[11],
-        // Estimate origin/dest by projecting backward/forward along heading
-        origLat:       s[6] && s[10] !== null ? s[6] - Math.cos((s[10]||0)*Math.PI/180)*12 : undefined,
-        origLon:       s[5] && s[10] !== null ? s[5] - Math.sin((s[10]||0)*Math.PI/180)*18 : undefined,
-        destLat:       s[6] && s[10] !== null ? s[6] + Math.cos((s[10]||0)*Math.PI/180)*12 : undefined,
-        destLon:       s[5] && s[10] !== null ? s[5] + Math.sin((s[10]||0)*Math.PI/180)*18 : undefined,
+        // Snap inferred route endpoints to known airport hubs for consistent city alignment
+        ...(() => {
+          if (s[10] === null || s[10] === undefined) return {};
+          const headingRad = s[10] * Math.PI / 180;
+          const backLat = s[6] - Math.cos(headingRad) * 15;
+          const backLon = wrapLon(s[5] - Math.sin(headingRad) * 20);
+          const fwdLat = s[6] + Math.cos(headingRad) * 15;
+          const fwdLon = wrapLon(s[5] + Math.sin(headingRad) * 20);
+          const origHub = nearestHub(backLat, backLon);
+          const destHub = nearestHub(fwdLat, fwdLon, origHub?.name);
+          return {
+            origLat: origHub?.lat,
+            origLon: origHub?.lon,
+            destLat: destHub?.lat,
+            destLon: destHub?.lon,
+          };
+        })(),
         progress:      0.5,
       }))
       .filter(f => !f.onGround);

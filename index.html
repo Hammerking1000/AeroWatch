@@ -39,7 +39,6 @@
   }
   canvas:active { cursor: grabbing; }
 
-  /* HUD OVERLAY */
   #hud {
     position: fixed;
     inset: 0;
@@ -47,7 +46,6 @@
     z-index: 10;
   }
 
-  /* Corner brackets */
   .corner {
     position: absolute;
     width: 40px; height: 40px;
@@ -60,7 +58,6 @@
   .corner-bl { bottom: 12px; left: 12px; border-width: 0 0 2px 2px; }
   .corner-br { bottom: 12px; right: 12px; border-width: 0 2px 2px 0; }
 
-  /* HEADER BAR */
   #header {
     position: fixed;
     top: 0; left: 0; right: 0;
@@ -128,7 +125,6 @@
     50% { opacity: 0.4; transform: scale(0.7); }
   }
 
-  /* LEFT PANEL */
   #panel-left {
     position: fixed;
     top: 60px;
@@ -186,7 +182,6 @@
   .stat-val.green { color: var(--green); text-shadow: var(--glow-green); }
   .stat-val.orange { color: var(--orange); text-shadow: var(--glow-orange); }
 
-  /* Slider */
   .ctrl-row {
     display: flex;
     justify-content: space-between;
@@ -229,7 +224,6 @@
     height: 3px;
   }
 
-  /* Select / checkboxes */
   select {
     background: rgba(0,20,35,0.9);
     border: 1px solid var(--border);
@@ -286,7 +280,6 @@
     font-weight: bold;
   }
 
-  /* Buttons */
   .btn-row {
     display: flex;
     gap: 6px;
@@ -320,7 +313,6 @@
     box-shadow: var(--glow);
   }
 
-  /* RIGHT PANEL - Flight list */
   #panel-right {
     position: fixed;
     top: 60px;
@@ -403,7 +395,6 @@
   .fi-alt { color: var(--green); font-size: 9px; }
   .fi-spd { color: var(--orange); font-size: 9px; }
 
-  /* BOTTOM BAR */
   #bottom-bar {
     position: fixed;
     bottom: 0; left: 0; right: 0;
@@ -424,7 +415,6 @@
   .bottom-item { display: flex; gap: 8px; }
   .bottom-key { color: var(--cyan-dim); }
 
-  /* Tooltip */
   #tooltip {
     position: fixed;
     background: rgba(0,10,20,0.95);
@@ -457,7 +447,6 @@
 
   .tt-val { color: var(--cyan); }
 
-  /* Loading overlay */
   #loading {
     position: fixed;
     inset: 0;
@@ -534,7 +523,6 @@
 <canvas id="globe"></canvas>
 <div id="scan-line"></div>
 
-<!-- LOADING -->
 <div id="loading">
   <div class="load-title">AEROWATCH</div>
   <div style="font-size:10px;color:var(--cyan-dim);letter-spacing:4px;margin-top:-10px">GLOBAL FLIGHT TRACKER // PROTOTYPE</div>
@@ -542,7 +530,6 @@
   <div class="load-status">INITIALIZING SATELLITE UPLINK...</div>
 </div>
 
-<!-- HUD CORNERS -->
 <div id="hud">
   <div class="corner corner-tl"></div>
   <div class="corner corner-tr"></div>
@@ -550,7 +537,6 @@
   <div class="corner corner-br"></div>
 </div>
 
-<!-- HEADER -->
 <div id="header">
   <div class="title-block">
     <span class="title-main">AEROWATCH</span>
@@ -563,7 +549,6 @@
   </div>
 </div>
 
-<!-- LEFT PANEL -->
 <div id="panel-left">
   <div class="panel-block">
     <div class="panel-label">// TRAFFIC OVERVIEW</div>
@@ -656,7 +641,6 @@
   </div>
 </div>
 
-<!-- RIGHT PANEL -->
 <div id="panel-right">
   <div class="flight-list">
     <div class="flight-list-header">// ACTIVE FLIGHTS <span id="list-count" style="float:right;color:var(--cyan)">[0]</span></div>
@@ -664,7 +648,6 @@
   </div>
 </div>
 
-<!-- BOTTOM BAR -->
 <div id="bottom-bar">
   <div class="bottom-item"><span class="bottom-key">DRAG</span><span>ROTATE GLOBE</span></div>
   <div class="bottom-item"><span class="bottom-key">SCROLL</span><span>ZOOM</span></div>
@@ -673,7 +656,6 @@
   <div class="bottom-item" style="margin-left:auto;color:rgba(0,245,255,0.25)">DATA: OPENSKY NETWORK // ADS-B LIVE</div>
 </div>
 
-<!-- TOOLTIP -->
 <div id="tooltip">
   <div class="tt-call" id="tt-call">---</div>
   <div class="tt-row"><span>ORIGIN</span><span class="tt-val" id="tt-orig">---</span></div>
@@ -685,7 +667,6 @@
 </div>
 
 <script>
-// ── CONSTANTS ──────────────────────────────────────────────────────────────
 const C = {
   CYAN:        '#00f5ff',
   CYAN_DIM:    '#00a8b5',
@@ -737,7 +718,6 @@ const AIRPORT_HUBS = [
   { name:'Vancouver', lat:49.19, lon:-123.18 },
 ];
 
-// ── STATE ──────────────────────────────────────────────────────────────────
 let flights   = [];
 let displayed = [];
 let selected  = null;
@@ -755,7 +735,6 @@ let settings = {
   region:     'all',
 };
 
-// Globe rotation / zoom state
 let globe = {
   rotX: 0.35,
   rotY: 0,
@@ -766,7 +745,6 @@ let globe = {
   autoRotate: true,
 };
 
-// ── CANVAS SETUP ───────────────────────────────────────────────────────────
 const canvas = document.getElementById('globe');
 const ctx    = canvas.getContext('2d');
 
@@ -777,7 +755,6 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-// ── GLOBE MATH ─────────────────────────────────────────────────────────────
 function getRadius() {
   return Math.min(canvas.width, canvas.height) * 0.36 * globe.zoom;
 }
@@ -793,13 +770,10 @@ function latLonTo3D(lat, lon) {
 }
 
 function rotatePoint(p) {
-  // Rotate around Y then X
   const cy = Math.cos(globe.rotY), sy = Math.sin(globe.rotY);
   const cx = Math.cos(globe.rotX), sx = Math.sin(globe.rotX);
-  // Y rotation
   const x1 =  p.x * cy + p.z * sy;
   const z1 = -p.x * sy + p.z * cy;
-  // X rotation
   const y2 =  p.y * cx - z1 * sx;
   const z2 =  p.y * sx + z1 * cx;
   return { x: x1, y: y2, z: z2 };
@@ -846,7 +820,6 @@ function nearestHub(lat, lon, excludeName = null) {
   return best;
 }
 
-// Great circle interpolation
 function slerp(p1, p2, t) {
   const dot = p1.x*p2.x + p1.y*p2.y + p1.z*p2.z;
   const clamped = Math.max(-1, Math.min(1, dot));
@@ -860,13 +833,11 @@ function slerp(p1, p2, t) {
   return { x: a*p1.x+b*p2.x, y: a*p1.y+b*p2.y, z: a*p1.z+b*p2.z };
 }
 
-// ── DRAW GLOBE ─────────────────────────────────────────────────────────────
 function drawGlobe() {
   const R  = getRadius();
   const cx = canvas.width  / 2;
   const cy = canvas.height / 2;
 
-  // Outer atmosphere glow
   const atm = ctx.createRadialGradient(cx, cy, R * 0.95, cx, cy, R * 1.15);
   atm.addColorStop(0,   'rgba(0,245,255,0.08)');
   atm.addColorStop(0.5, 'rgba(0,100,180,0.04)');
@@ -876,7 +847,6 @@ function drawGlobe() {
   ctx.arc(cx, cy, R * 1.15, 0, Math.PI*2);
   ctx.fill();
 
-  // Globe base
   const grad = ctx.createRadialGradient(cx - R*0.3, cy - R*0.3, R*0.05, cx, cy, R);
   grad.addColorStop(0,   '#061e35');
   grad.addColorStop(0.6, '#031120');
@@ -886,7 +856,6 @@ function drawGlobe() {
   ctx.arc(cx, cy, R, 0, Math.PI*2);
   ctx.fill();
 
-  // Specular highlight
   const spec = ctx.createRadialGradient(cx - R*0.35, cy - R*0.35, 0, cx - R*0.2, cy - R*0.2, R*0.6);
   spec.addColorStop(0,   'rgba(0,245,255,0.06)');
   spec.addColorStop(0.4, 'rgba(0,245,255,0.02)');
@@ -896,7 +865,6 @@ function drawGlobe() {
   ctx.arc(cx, cy, R, 0, Math.PI*2);
   ctx.fill();
 
-  // Night-side shadow
   const shadow = ctx.createRadialGradient(cx + R*0.4, cy + R*0.2, R*0.2, cx + R*0.5, cy + R*0.3, R*1.1);
   shadow.addColorStop(0,   'rgba(0,0,0,0.55)');
   shadow.addColorStop(1,   'transparent');
@@ -910,7 +878,6 @@ function drawGrid() {
   if (!layers.grid) return;
   const R = getRadius();
 
-  // Latitude lines
   for (let lat = -80; lat <= 80; lat += 20) {
     ctx.beginPath();
     let first = true;
@@ -926,7 +893,6 @@ function drawGrid() {
     ctx.stroke();
   }
 
-  // Longitude lines
   for (let lon = -180; lon < 180; lon += 20) {
     ctx.beginPath();
     let first = true;
@@ -946,30 +912,25 @@ function drawGrid() {
 function drawArc(f) {
   if (!hasCoords(f.lat, f.lon)) return;
 
-  // Simulate departure/arrival from heading + position
   const R  = getRadius();
   const a0 = latLonTo3D(f.lat, f.lon);
   const r0 = rotatePoint(a0);
-  if (r0.z < -0.15) return; // behind globe
+  if (r0.z < -0.15) return;
 
   const p0 = project(r0);
   if (!p0) return;
 
-  // Draw arc if we have origin / destination estimates
   if (hasCoords(f.origLat, f.origLon) && hasCoords(f.destLat, f.destLon)) {
     const a1 = latLonTo3D(f.origLat, f.origLon);
     const a2 = latLonTo3D(f.destLat, f.destLon);
-
-    // Lift arc points off globe surface
     const lift = 0.12 * settings.arcHeight;
-
     const screenPts = [];
     const steps = 40;
     for (let i = 0; i <= steps; i++) {
       const t   = i / steps;
       let  pt  = slerp(a1, a2, t);
       const len = Math.sqrt(pt.x*pt.x+pt.y*pt.y+pt.z*pt.z);
-      const arcLift = lift * Math.sin(Math.PI * t); // parabolic
+      const arcLift = lift * Math.sin(Math.PI * t);
       pt = { x: pt.x/len * (1+arcLift), y: pt.y/len * (1+arcLift), z: pt.z/len * (1+arcLift) };
 
       const r = rotatePoint(pt);
@@ -980,7 +941,6 @@ function drawArc(f) {
 
     const progress  = Math.max(0, Math.min(1, f.progress ?? 0.5));
     const isSelected = selected && selected.callsign === f.callsign;
-
     const drawSegment = (predicate) => {
       ctx.beginPath();
       let first = true;
@@ -1040,7 +1000,6 @@ function drawArc(f) {
     }
   }
 
-  // Dot for current position
   if (layers.dots) {
     const isSelected = selected && selected.callsign === f.callsign;
     const dotR = isSelected ? 5 : (R > 250 ? 3 : 2.5);
@@ -1064,7 +1023,6 @@ function drawArc(f) {
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Heading tick
     if (f.heading !== null && f.heading !== undefined) {
       const headRad = (90 - f.heading) * Math.PI / 180;
       const tickLen = dotR * 2.5;
@@ -1076,7 +1034,6 @@ function drawArc(f) {
       ctx.stroke();
     }
 
-    // Callsign label for selected
     if (isSelected) {
       ctx.font = '11px "Share Tech Mono"';
       ctx.fillStyle = '#ffff64';
@@ -1088,7 +1045,6 @@ function drawArc(f) {
   }
 }
 
-// ── APPLY FILTERS ──────────────────────────────────────────────────────────
 function applyFilters() {
   const region = settings.region;
   const bounds = REGION_BOUNDS[region];
@@ -1114,11 +1070,10 @@ function updateStats() {
   document.getElementById('list-count').textContent    = `[${displayed.length}]`;
 }
 
-// ── FLIGHT LIST ────────────────────────────────────────────────────────────
 function updateFlightList() {
   const body = document.getElementById('flight-list-body');
   body.innerHTML = '';
-  const slice = displayed.slice(0, 80); // list only top 80
+  const slice = displayed.slice(0, 80);
   slice.forEach(f => {
     const div = document.createElement('div');
     div.className = 'flight-item' + (selected && selected.callsign === f.callsign ? ' selected' : '');
@@ -1145,7 +1100,6 @@ function selectFlight(f) {
   updateFlightList();
 }
 
-// ── TOOLTIP ────────────────────────────────────────────────────────────────
 function showTooltip(f, mx, my) {
   const tt = document.getElementById('tooltip');
   document.getElementById('tt-call').textContent    = f.callsign || '??????';
@@ -1165,7 +1119,6 @@ function hideTooltip() {
   document.getElementById('tooltip').style.display = 'none';
 }
 
-// ── MOUSE INTERACTIONS ─────────────────────────────────────────────────────
 canvas.addEventListener('mousedown', e => {
   globe.dragging   = true;
   globe.autoRotate = false;
@@ -1187,7 +1140,6 @@ window.addEventListener('mousemove', e => {
     return;
   }
 
-  // Hit-test for tooltip
   const R  = getRadius();
   let   closest = null;
   let   minDist = 20;
@@ -1226,11 +1178,9 @@ canvas.addEventListener('click', e => {
   if (closest) selectFlight(closest);
 });
 
-// ── CONTROLS ───────────────────────────────────────────────────────────────
 function sliderSetup(id, cb) {
   const el = document.getElementById(id);
   el.addEventListener('input', () => cb(el));
-  // init track fill
   const pct = (el.value - el.min) / (el.max - el.min) * 100;
   el.style.setProperty('--val', pct + '%');
 }
@@ -1290,15 +1240,10 @@ function resetView() {
   globe.autoRotate = true;
 }
 
-// ── FLIGHT DATA (OpenSky) ─────────────────────────────────────────────────
 async function fetchFlights() {
   document.getElementById('live-label').textContent = 'FETCHING...';
 
   try {
-    // OpenSky Network free REST API — no auth needed for basic states
-    // Returns: [icao24, callsign, origin_country, time_position, last_contact,
-    //           longitude, latitude, baro_altitude, on_ground, velocity,
-    //           true_track, vertical_rate, sensors, geo_altitude, squawk, spi, position_source]
     const res = await fetch('https://opensky-network.org/api/states/all', {
       headers: { 'Accept': 'application/json' }
     });
@@ -1307,19 +1252,18 @@ async function fetchFlights() {
     const data = await res.json();
 
     flights = (data.states || [])
-      .filter(s => s[5] !== null && s[6] !== null) // must have position
+      .filter(s => s[5] !== null && s[6] !== null)
       .map(s => ({
         icao24:        s[0],
         callsign:      (s[1] || '').trim() || s[0].toUpperCase(),
         originCountry: s[2],
         lon:           s[5],
         lat:           s[6],
-        alt:           s[7] ? s[7] * 3.28084 : (s[13] ? s[13] * 3.28084 : 0), // meters → feet
+        alt:           s[7] ? s[7] * 3.28084 : (s[13] ? s[13] * 3.28084 : 0),
         onGround:      s[8],
-        speed:         s[9] ? s[9] * 1.94384 : 0, // m/s → kts
+        speed:         s[9] ? s[9] * 1.94384 : 0,
         heading:       s[10],
         vertRate:      s[11],
-        // Snap inferred route endpoints to known airport hubs for consistent city alignment
         ...(() => {
           if (s[10] === null || s[10] === undefined) return {};
           const headingRad = s[10] * Math.PI / 180;
@@ -1351,14 +1295,12 @@ async function fetchFlights() {
     console.warn('OpenSky fetch failed:', err.message);
     document.getElementById('live-label').textContent = 'DEMO MODE';
 
-    // ── DEMO DATA ── generate plausible random flights
     if (flights.length === 0) generateDemoFlights();
   }
 }
 
 function generateDemoFlights() {
   const routes = [
-    // Major global routes as [origLat,origLon,destLat,destLon,country]
     [51.5,-0.1,40.7,-74.0,'United Kingdom'],
     [40.7,-74.0,48.8,2.3,'United States'],
     [35.7,139.7,34.0,118.2,'Japan'],
@@ -1406,7 +1348,6 @@ function generateDemoFlights() {
   applyFilters();
 }
 
-// ── CLOCK ──────────────────────────────────────────────────────────────────
 function updateClock() {
   const now = new Date();
   const h   = String(now.getUTCHours()).padStart(2,'0');
@@ -1420,34 +1361,27 @@ function updateClock() {
   }
 }
 
-// ── RENDER LOOP ────────────────────────────────────────────────────────────
 let frame = 0;
 function render() {
   requestAnimationFrame(render);
   frame++;
 
-  // Auto-rotate
   if (globe.autoRotate) globe.rotY += 0.0008;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // Background
   ctx.fillStyle = C.BG;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Stars
   if (frame % 300 === 0 || frame === 1) buildStars();
   drawStars();
 
   drawGlobe();
   drawGrid();
 
-  // Arcs and dots
   if (layers.arcs || layers.dots) {
     displayed.forEach(f => drawArc(f));
   }
 
-  // Globe rim
   const R  = getRadius();
   const cx = canvas.width  / 2;
   const cy = canvas.height / 2;
@@ -1460,7 +1394,6 @@ function render() {
   ctx.stroke();
   ctx.shadowBlur  = 0;
 
-  // Polar rings
   for (const alpha of [0.15, 0.06]) {
     ctx.beginPath();
     ctx.arc(cx, cy, R * 1.02, 0, Math.PI*2);
@@ -1472,7 +1405,6 @@ function render() {
   updateClock();
 }
 
-// ── STARS ─────────────────────────────────────────────────────────────────
 let stars = [];
 function buildStars() {
   stars = [];
@@ -1498,14 +1430,12 @@ function drawStars() {
   });
 }
 
-// ── BOOT ───────────────────────────────────────────────────────────────────
 setTimeout(() => {
   document.getElementById('loading').style.transition = 'opacity 0.6s';
   document.getElementById('loading').style.opacity    = '0';
   setTimeout(() => {
     document.getElementById('loading').style.display = 'none';
     fetchFlights();
-    // Refresh every 60s (OpenSky rate limit friendly)
     setInterval(fetchFlights, 60000);
   }, 600);
 }, 2200);
